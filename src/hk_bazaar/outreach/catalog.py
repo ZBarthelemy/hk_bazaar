@@ -20,6 +20,12 @@ CONDITION_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 STRONG_MATCH_THRESHOLD = 75.0
+REGEX_MATCH_BASE_SCORE = 80.0
+
+# Brands that make many unrelated products — never use alone as a fuzzy keyword.
+GENERIC_BRANDS = frozenset(
+    {"sony", "samsung", "lg", "panasonic", "philips", "sharp", "toshiba", "hisense", "tcl"}
+)
 
 
 class CatalogReferences(BaseModel):
@@ -63,7 +69,8 @@ def _patterns_path() -> Path:
 def _keyword_variations(item: CatalogItem) -> list[str]:
     keywords: list[str] = [item.display_name]
     if item.brand:
-        keywords.append(item.brand)
+        if item.brand.lower() not in GENERIC_BRANDS:
+            keywords.append(item.brand)
         keywords.append(f"{item.brand} {item.display_name}")
     keywords.append(item.sku.replace("_", " "))
 
@@ -135,6 +142,18 @@ def condition_bonus(item: CatalogItem, condition: str) -> float:
     return 0.0
 
 
+def _load_pattern_sets() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    patterns_path = _patterns_path()
+    if not patterns_path.exists():
+        return {}, {}
+    raw = yaml.safe_load(patterns_path.read_text(encoding="utf-8")) or {}
+    return raw.get("patterns") or {}, raw.get("exclusions") or {}
+
+
+def _matches_exclusion(blob: str, exclusions: list[str]) -> bool:
+    return any(re.search(pattern, blob, re.I) for pattern in exclusions)
+
+
 def match_listing_to_catalog(
     title: str,
     description: str | None = None,
@@ -150,25 +169,27 @@ def match_listing_to_catalog(
         return None
 
     catalog = catalog or load_outreach_catalog()
+    pattern_map, exclusion_map = _load_pattern_sets()
     best: CatalogMatch | None = None
 
     for sku, item in catalog.items():
+        pats = pattern_map.get(sku, [])
+        exclusions = exclusion_map.get(sku, [])
+        if exclusions and _matches_exclusion(blob, exclusions):
+            continue
+        if pats and not any(re.search(pattern, blob, re.I) for pattern in pats):
+            continue
+
         choices = item.search_keywords
         result = process.extractOne(blob, choices, scorer=fuzz.partial_ratio)
         if result is None:
             continue
         _choice, fuzzy_score, _ = result
         condition = infer_condition(blob)
-        score = float(fuzzy_score) + condition_bonus(item, condition)
-
-        # Regex patterns from patterns.yaml as a hard gate for weak fuzzy hits.
-        patterns_path = _patterns_path()
-        if patterns_path.exists():
-            patterns_raw = yaml.safe_load(patterns_path.read_text(encoding="utf-8")) or {}
-            pats = patterns_raw.get("patterns", {}).get(sku, [])
-            if pats and not any(re.search(p, blob, re.I) for p in pats):
-                if fuzzy_score < 85:
-                    continue
+        if pats:
+            score = max(float(fuzzy_score), REGEX_MATCH_BASE_SCORE) + condition_bonus(item, condition)
+        else:
+            score = float(fuzzy_score) + condition_bonus(item, condition)
 
         if best is None or score > best.confidence:
             best = CatalogMatch(

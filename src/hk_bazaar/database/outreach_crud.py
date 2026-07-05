@@ -48,18 +48,38 @@ def get_outreach_attempt(session: Session, attempt_id: int) -> OutreachAttempt |
 
 ACTIONABLE_OUTREACH_STATUSES = (OutreachStatus.PENDING, OutreachStatus.DRY_RUN)
 
+ELECTRONICS_FAMILIES = frozenset({"phone", "laptop", "tablet", "gaming", "appliance"})
+
+
+def _skus_for_families(families: frozenset[str] | set[str]) -> list[str]:
+    from hk_bazaar.outreach.catalog import load_outreach_catalog
+
+    catalog = load_outreach_catalog()
+    return [sku for sku, item in catalog.items() if item.family in families]
+
 
 def list_outreach_attempts(
     session: Session,
     *,
     statuses: tuple[OutreachStatus, ...] | None = None,
     platform: Platform | None = None,
+    category: str | None = None,
+    families: frozenset[str] | set[str] | None = None,
     limit: int = 50,
 ) -> list[OutreachAttempt]:
     statuses = statuses or ACTIONABLE_OUTREACH_STATUSES
     stmt = select(OutreachAttempt).where(OutreachAttempt.status.in_(statuses))
     if platform is not None:
         stmt = stmt.where(OutreachAttempt.platform == platform)
+    if category:
+        stmt = stmt.join(Listing, OutreachAttempt.listing_id == Listing.id).where(
+            Listing.category.ilike(f"%{category}%")
+        )
+    if families:
+        skus = _skus_for_families(families)
+        if not skus:
+            return []
+        stmt = stmt.where(OutreachAttempt.sku.in_(skus))
     stmt = stmt.order_by(OutreachAttempt.created_at.desc()).limit(limit)
     return list(session.execute(stmt).scalars().all())
 

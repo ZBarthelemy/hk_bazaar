@@ -77,6 +77,22 @@ def test_urgency_detection() -> None:
     assert has_urgency_signals("急售 iPhone")
 
 
+def test_sony_tv_does_not_match_ps5() -> None:
+    titles = [
+        'Sony Bravia 52" TV',
+        "Sony 5.1ch Surround Sound System Speaker Set",
+        "Sony Bravia 40\" Full HD TV + Sony 600W 5.1 Cinema Surround Sound System",
+    ]
+    for title in titles:
+        assert match_listing_to_catalog(title) is None, f"False PS5 match: {title}"
+
+
+def test_ps5_still_matches() -> None:
+    match = match_listing_to_catalog("PS5 Slim disc edition with 2 controllers")
+    assert match is not None
+    assert match.sku == "ps5_slim"
+
+
 def test_platform_templates() -> None:
     from hk_bazaar.outreach.platform_outreach import template_for_platform
 

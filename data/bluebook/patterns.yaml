@@ -47,6 +47,10 @@ patterns:
     - "ps5|playstation\\s*5"
     - "playstation5"
 
+exclusions:
+  ps5_slim:
+    - "bravia|\\btelevision\\b|\\btv\\b|sound\\s*system|surround|speaker|soundbar|home\\s*theatre|home\\s*theater"
+
   nintendo_switch_oled:
     - "switch\\s*oled"
     - "nintendo\\s*switch\\s*oled"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from hk_bazaar.database.engine import get_session, init_db
 from hk_bazaar.database.models import OutreachStatus, Platform
 from hk_bazaar.database.outreach_crud import (
     ACTIONABLE_OUTREACH_STATUSES,
+    ELECTRONICS_FAMILIES,
     cancel_outreach,
     clear_outreach_queue,
     get_outreach_attempt,
@@ -296,6 +298,48 @@ def seed_cmd() -> None:
         ingest_listings(session, samples)
 
     console.print(f"[green]Seeded {len(samples)} sample listings[/green]")
+    console.print(
+        "[dim]Seed listings use fake URLs and are excluded from watch-deals. "
+        "Run hk-bazaar unseed to remove them.[/dim]"
+    )
+
+
+@app.command("unseed")
+def unseed_cmd() -> None:
+    """Deactivate sample seed listings and cancel their outreach attempts."""
+    init_db()
+    from sqlalchemy import select
+
+    from hk_bazaar.database.models import Listing, OutreachAttempt
+    from hk_bazaar.database.outreach_crud import cancel_outreach
+
+    with db_session() as session:
+        seeds = list(
+            session.execute(select(Listing).where(Listing.external_id.like("seed-%"))).scalars().all()
+        )
+        if not seeds:
+            console.print("[yellow]No seed listings found.[/yellow]")
+            raise typer.Exit(0)
+
+        seed_ids = [listing.id for listing in seeds]
+        for listing in seeds:
+            listing.is_active = False
+
+        attempts = list(
+            session.execute(
+                select(OutreachAttempt).where(OutreachAttempt.listing_id.in_(seed_ids))
+            ).scalars().all()
+        )
+        for attempt in attempts:
+            if attempt.status in ACTIONABLE_OUTREACH_STATUSES:
+                cancel_outreach(session, attempt)
+
+        session.commit()
+
+    console.print(
+        f"[green]Deactivated {len(seeds)} seed listing(s) and cancelled "
+        f"{len(attempts)} related outreach attempt(s).[/green]"
+    )
 
 
 @bluebook_app.command("list")
@@ -437,8 +481,15 @@ def _render_outreach_table(
     attempts: list,
     *,
     title: str = "Outreach opportunities",
+    show_urls: bool = False,
+    url_only: bool = False,
 ) -> None:
     sorted_attempts = sorted(attempts, key=_outreach_spread, reverse=True)
+    if url_only:
+        for row in sorted_attempts:
+            typer.echo(f"{row.id:>4}  {row.listing_url}")
+        return
+
     table = Table(title=title, box=box.ROUNDED, show_lines=False)
     table.add_column("ID", justify="right", style="bold")
     table.add_column("Status")
@@ -449,10 +500,11 @@ def _render_outreach_table(
     table.add_column("Target", justify="right")
     table.add_column("Bid", justify="right", style="bold green")
     table.add_column("Spread", justify="right", style="yellow")
-    table.add_column("URL", max_width=24, overflow="ellipsis")
+    if show_urls:
+        table.add_column("URL", overflow="fold", max_width=80)
     for row in sorted_attempts:
         spread = _outreach_spread(row)
-        table.add_row(
+        cells = [
             str(row.id),
             row.status.value,
             row.platform.value,
@@ -462,13 +514,15 @@ def _render_outreach_table(
             f"{row.buy_target:,.0f}",
             f"{row.proposed_bid:,.0f}",
             f"+{spread:,.0f}" if spread >= 0 else f"{spread:,.0f}",
-            row.listing_url,
-        )
+        ]
+        if show_urls:
+            cells.append(row.listing_url)
+        table.add_row(*cells)
     console.print(table)
-    console.print(
-        "[dim]Details: hk-bazaar show-outreach <id>  |  "
-        "Approve: hk-bazaar approve-outreach <id>[/dim]"
-    )
+    hint = "Details: hk-bazaar show-outreach <id>  |  Approve: hk-bazaar approve-outreach <id>"
+    if not show_urls:
+        hint = f"URLs: add --urls  |  {hint}"
+    console.print(f"[dim]{hint}[/dim]")
 
 
 @app.command("list-outreaches")
@@ -476,6 +530,19 @@ def list_outreaches_cmd(
     limit: Annotated[int, typer.Option("--limit", "-n", help="Max rows to show")] = 50,
     platform: Annotated[str | None, typer.Option("--platform", "-p", help="Filter by platform")] = None,
     status: Annotated[str | None, typer.Option("--status", "-s", help="Filter by status")] = None,
+    electronics: Annotated[
+        bool, typer.Option("--electronics", "-e", help="Phones, laptops, tablets, gaming, appliances")
+    ] = False,
+    family: Annotated[
+        str | None, typer.Option("--family", "-f", help="Catalog family: phone, laptop, furniture, …")
+    ] = None,
+    category: Annotated[
+        str | None, typer.Option("--category", "-c", help="Listing category from scraper, e.g. Electronics")
+    ] = None,
+    show_urls: Annotated[bool, typer.Option("--urls", "-u", help="Include full listing URLs in table")] = False,
+    url_only: Annotated[
+        bool, typer.Option("--url-only", help="Print only id and URL (tab-separated, for copy/pipe)")
+    ] = False,
 ) -> None:
     """List qualified outreach opportunities (dry-run and pending)."""
     init_db()
@@ -493,55 +560,113 @@ def list_outreaches_cmd(
         except ValueError as exc:
             raise typer.BadParameter(f"Unknown status: {status}") from exc
 
+    families_filter = None
+    if electronics:
+        families_filter = ELECTRONICS_FAMILIES
+    elif family:
+        families_filter = {family.strip().lower()}
+
+    title = "Outreach opportunities"
+    if electronics:
+        title = "Outreach opportunities — electronics"
+    elif family:
+        title = f"Outreach opportunities — {family}"
+    elif category:
+        title = f"Outreach opportunities — {category}"
+
     with db_session() as session:
         attempts = list_outreach_attempts(
             session,
             statuses=status_filter,
             platform=platform_filter,
+            category=category,
+            families=families_filter,
             limit=limit,
         )
         if not attempts:
             console.print("[yellow]No outreach opportunities found.[/yellow]")
             console.print("[dim]Run: hk-bazaar watch-deals --dry-run[/dim]")
             raise typer.Exit(0)
-        _render_outreach_table(attempts)
+        _render_outreach_table(attempts, title=title, show_urls=show_urls, url_only=url_only)
 
 
 @app.command("pending-outreaches")
 def pending_outreaches_cmd(
     limit: Annotated[int, typer.Option("--limit", "-n")] = 50,
+    electronics: Annotated[bool, typer.Option("--electronics", "-e")] = False,
+    family: Annotated[str | None, typer.Option("--family", "-f")] = None,
+    category: Annotated[str | None, typer.Option("--category", "-c")] = None,
+    show_urls: Annotated[bool, typer.Option("--urls", "-u")] = False,
+    url_only: Annotated[bool, typer.Option("--url-only")] = False,
 ) -> None:
     """Show outreach opportunities awaiting review (alias for list-outreaches)."""
-    list_outreaches_cmd(limit=limit, platform=None, status=None)
+    list_outreaches_cmd(
+        limit=limit,
+        platform=None,
+        status=None,
+        electronics=electronics,
+        family=family,
+        category=category,
+        show_urls=show_urls,
+        url_only=url_only,
+    )
 
 
-@app.command("show-outreach")
-def show_outreach_cmd(
-    attempt_id: Annotated[int, typer.Argument(help="Outreach attempt ID")],
-) -> None:
-    """Show full detail for one outreach opportunity."""
+def _get_outreach_or_exit(attempt_id: int):
     init_db()
     with db_session() as session:
         attempt = get_outreach_attempt(session, attempt_id)
         if attempt is None:
             raise typer.BadParameter(f"Outreach attempt {attempt_id} not found")
+        session.expunge(attempt)
+        return attempt
 
-        spread = _outreach_spread(attempt)
-        reasons = "\n".join(f"  • {reason}" for reason in attempt.qualification_reasons)
-        body = (
-            f"[bold]{attempt.sku}[/bold] — {attempt.listing_title}\n\n"
-            f"Platform: {attempt.platform.value}\n"
-            f"Status:   {attempt.status.value}\n"
-            f"URL:      {attempt.listing_url}\n\n"
-            f"Listing price: HKD {attempt.listing_price:,.0f}\n"
-            f"Buy target:    HKD {attempt.buy_target:,.0f}\n"
-            f"Proposed bid:  HKD {attempt.proposed_bid:,.0f}\n"
-            f"Spread:        HKD {spread:+,.0f}\n\n"
-            f"[bold]Why qualified:[/bold]\n{reasons}\n\n"
-            f"[bold]Message ({template_hint(attempt.platform.value)}):[/bold]\n{attempt.message}\n\n"
-            f"[dim]Approve: hk-bazaar approve-outreach {attempt.id}[/dim]"
-        )
-        console.print(Panel(body, title=f"Outreach #{attempt.id}", border_style="green"))
+
+@app.command("outreach-url")
+def outreach_url_cmd(
+    attempt_id: Annotated[int, typer.Argument(help="Outreach attempt ID")],
+    open_browser: Annotated[bool, typer.Option("--open", "-o", help="Open URL in default browser")] = False,
+) -> None:
+    """Print the listing URL for an outreach attempt (easy to copy or pipe)."""
+    attempt = _get_outreach_or_exit(attempt_id)
+    typer.echo(attempt.listing_url)
+    if open_browser:
+        webbrowser.open(attempt.listing_url)
+
+
+@app.command("show-outreach")
+def show_outreach_cmd(
+    attempt_id: Annotated[int, typer.Argument(help="Outreach attempt ID")],
+    url_only: Annotated[bool, typer.Option("--url-only", "-u", help="Print only the listing URL")] = False,
+    open_browser: Annotated[bool, typer.Option("--open", "-o", help="Open URL in default browser")] = False,
+) -> None:
+    """Show full detail for one outreach opportunity."""
+    attempt = _get_outreach_or_exit(attempt_id)
+    if url_only:
+        typer.echo(attempt.listing_url)
+        if open_browser:
+            webbrowser.open(attempt.listing_url)
+        return
+
+    spread = _outreach_spread(attempt)
+    reasons = "\n".join(f"  • {reason}" for reason in attempt.qualification_reasons)
+    body = (
+        f"[bold]{attempt.sku}[/bold] — {attempt.listing_title}\n\n"
+        f"Platform: {attempt.platform.value}\n"
+        f"Status:   {attempt.status.value}\n"
+        f"URL:      {attempt.listing_url}\n\n"
+        f"Listing price: HKD {attempt.listing_price:,.0f}\n"
+        f"Buy target:    HKD {attempt.buy_target:,.0f}\n"
+        f"Proposed bid:  HKD {attempt.proposed_bid:,.0f}\n"
+        f"Spread:        HKD {spread:+,.0f}\n\n"
+        f"[bold]Why qualified:[/bold]\n{reasons}\n\n"
+        f"[bold]Message ({template_hint(attempt.platform.value)}):[/bold]\n{attempt.message}\n\n"
+        f"[dim]URL only: hk-bazaar outreach-url {attempt.id}[/dim]\n"
+        f"[dim]Approve: hk-bazaar approve-outreach {attempt.id}[/dim]"
+    )
+    console.print(Panel(body, title=f"Outreach #{attempt.id}", border_style="green"))
+    if open_browser:
+        webbrowser.open(attempt.listing_url)
 
 
 def template_hint(platform: str) -> str:

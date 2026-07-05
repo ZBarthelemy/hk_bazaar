@@ -58,6 +58,8 @@ class OutreachManager:
             return created_ids
 
         for listing in listings:
+            if listing.external_id.startswith("seed-"):
+                continue
             if not self._platform_allowed(listing.platform.value):
                 continue
             if outreach_already_queued(self.session, listing.id):
