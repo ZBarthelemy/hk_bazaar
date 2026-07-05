@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     facebook_storage_state: Path = Field(default=Path("playwright-state/facebook.json"))
     deal_recent_days: int = Field(default=7, ge=1)
     deal_price_percentile: float = Field(default=25.0, ge=0.0, le=100.0)
+    bluebook_catalog_path: Path = Field(default=PROJECT_ROOT / "data" / "bluebook" / "catalog.yaml")
+
+    # Outreach & bidding (conservative defaults — dry-run on)
+    outreach_dry_run: bool = True
+    outreach_auto_approve: bool = False
+    outreach_max_daily: int = Field(default=6, ge=1, le=50)
+    outreach_cooldown_days: int = Field(default=7, ge=1)
+    outreach_bid_discount: float = Field(default=0.95, gt=0.0, le=1.0)
+    outreach_platforms: str = "all"
+    carousell_storage_state: Path = Field(default=Path("playwright-state/carousell.json"))
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
     asiaxpat_base_url: str = "https://hongkong.asiaxpat.com"
     carousell_base_url: str = "https://www.carousell.com.hk"

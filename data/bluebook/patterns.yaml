@@ -1,0 +1,52 @@
+# Title/description regex patterns → catalog SKU keys (case-insensitive).
+
+patterns:
+  iphone_13_128gb:
+    - "iphone\\s*13(?:\\s*(?:pro|max))?\\s*(?:128\\s*gb|128gb)"
+    - "蘋果\\s*13.*128"
+    - "iphone13.*128"
+
+  iphone_14_pro_128gb:
+    - "iphone\\s*14\\s*pro(?:\\s*max)?\\s*(?:128\\s*gb|128gb)?"
+    - "iphone14pro"
+    - "14\\s*pro.*128"
+
+  iphone_15_pro_128gb:
+    - "iphone\\s*15\\s*pro(?:\\s*max)?\\s*(?:128\\s*gb|128gb)?"
+    - "iphone\\s*15(?:\\s*(?:plus))?\\s*(?:128\\s*gb|128gb)"
+    - "iphone15"
+
+  macbook_air_m1_256gb:
+    - "macbook\\s*air.*m1"
+    - "mac\\s*air.*m1"
+    - "macbook\\s*air.*2020.*m1"
+
+  ipad_10_64gb:
+    - "ipad\\s*(?:10(?:th)?|第10代)"
+    - "ipad\\s*10.*64"
+    - "ipad第10代"
+
+  ikea_kallax_bundle:
+    - "kallax"
+    - "ikea.*(?:shelf|desk|bookcase|wardrobe|galant|brimnes|lack)"
+    - "宜家.*(?:書櫃|書架|枱|桌)"
+
+  sofa_sofa_bed:
+    - "sofa\\s*bed|sofabed"
+    - "梳化床"
+    - "soderhamn|söderhamn|flybacken"
+    - "(?:3|three)[-\\s]?seater\\s*sofa"
+    - "l[-\\s]?shaped\\s*sofa"
+    - "梳化"
+
+  dyson_v12:
+    - "dyson\\s*v(?:11|12|15)"
+    - "dyson.*(?:vacuum|吸塵)"
+
+  ps5_slim:
+    - "ps5|playstation\\s*5"
+    - "playstation5"
+
+  nintendo_switch_oled:
+    - "switch\\s*oled"
+    - "nintendo\\s*switch\\s*oled"

@@ -95,6 +95,62 @@ class Listing(Base):
     )
 
 
+class OutreachStatus(enum.StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    SENT = "sent"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    DRY_RUN = "dry_run"
+
+
+class OutreachAttempt(Base):
+    """Queued or completed outreach / bid attempt."""
+
+    __tablename__ = "outreach_attempts"
+    __table_args__ = (
+        Index("ix_outreach_listing_id", "listing_id"),
+        Index("ix_outreach_status", "status"),
+        Index("ix_outreach_seller", "seller_external_id"),
+        Index("ix_outreach_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    platform: Mapped[Platform] = mapped_column(Enum(Platform), nullable=False)
+    sku: Mapped[str] = mapped_column(String(128), nullable=False)
+    listing_price: Mapped[float] = mapped_column(Float, nullable=False)
+    buy_target: Mapped[float] = mapped_column(Float, nullable=False)
+    proposed_bid: Mapped[float] = mapped_column(Float, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[OutreachStatus] = mapped_column(
+        Enum(OutreachStatus),
+        nullable=False,
+        default=OutreachStatus.PENDING,
+    )
+    qualification_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    seller_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    listing_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    listing_title: Mapped[str] = mapped_column(String(512), nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    screenshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class PriceHistory(Base):
     """Track price changes when listings are re-scraped."""
 

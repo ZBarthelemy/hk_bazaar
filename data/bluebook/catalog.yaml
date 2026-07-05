@@ -1,0 +1,137 @@
+# HK second-hand reference prices (HKD) — starter catalog from hk_bazaar.db + market research.
+# Conditions: excellent > good > fair (private sale, Hong Kong, mid-2026).
+# buy_target: typical flip purchase price (urgent/moving-sale listings).
+
+items:
+  iphone_13_128gb:
+    family: phone
+    brand: Apple
+    display_name: iPhone 13 128GB
+    references:
+      excellent: 3400
+      good: 3000
+      fair: 2600
+    buy_target: 2400
+    sell_target: 3200
+    source: hk_bazaar_db + gigglefone_2026
+    updated_at: "2026-07-05"
+
+  iphone_14_pro_128gb:
+    family: phone
+    brand: Apple
+    display_name: iPhone 14 Pro 128GB
+    references:
+      excellent: 4800
+      good: 4300
+      fair: 3800
+    buy_target: 3500
+    sell_target: 4500
+    source: hk_bazaar_db + gigglefone_2026
+    updated_at: "2026-07-05"
+
+  iphone_15_pro_128gb:
+    family: phone
+    brand: Apple
+    display_name: iPhone 15 / 15 Pro 128GB
+    references:
+      excellent: 7200
+      good: 6500
+      fair: 5800
+    buy_target: 5500
+    sell_target: 6800
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+    notes: "Patterns match 15 Pro and standard iPhone 15 128GB; verify model before pricing."
+
+  macbook_air_m1_256gb:
+    family: laptop
+    brand: Apple
+    display_name: MacBook Air M1 256GB
+    references:
+      excellent: 4500
+      good: 4000
+      fair: 3400
+    buy_target: 3000
+    sell_target: 4200
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+
+  ipad_10_64gb:
+    family: tablet
+    brand: Apple
+    display_name: iPad 10th gen 64GB
+    references:
+      excellent: 2200
+      good: 1900
+      fair: 1600
+    buy_target: 1400
+    sell_target: 2100
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+
+  ikea_kallax_bundle:
+    family: furniture
+    brand: IKEA
+    display_name: IKEA KALLAX / desk / shelf bundle
+    references:
+      excellent: 800
+      good: 550
+      fair: 350
+    buy_target: 200
+    sell_target: 600
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+    notes: "Range-based SKU; condition = completeness + wear."
+
+  sofa_sofa_bed:
+    family: furniture
+    brand: null
+    display_name: Sofa / sofa bed (L-shape or 3-seater)
+    references:
+      excellent: 2000
+      good: 1400
+      fair: 900
+    buy_target: 500
+    sell_target: 1500
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+    notes: "IKEA Söderhamn, Flybacken, Tree; logistics affect net margin."
+
+  dyson_v12:
+    family: appliance
+    brand: Dyson
+    display_name: Dyson V11 / V12 / V15 cordless vacuum
+    references:
+      excellent: 2800
+      good: 2200
+      fair: 1600
+    buy_target: 1200
+    sell_target: 2400
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"
+
+  ps5_slim:
+    family: gaming
+    brand: Sony
+    display_name: PlayStation 5 Slim (Disc or Digital)
+    references:
+      excellent: 3400
+      good: 3000
+      fair: 2600
+    buy_target: 2400
+    sell_target: 3100
+    source: market_estimate_hk
+    updated_at: "2026-07-05"
+
+  nintendo_switch_oled:
+    family: gaming
+    brand: Nintendo
+    display_name: Nintendo Switch OLED
+    references:
+      excellent: 1800
+      good: 1500
+      fair: 1200
+    buy_target: 1000
+    sell_target: 1600
+    source: hk_bazaar_db
+    updated_at: "2026-07-05"

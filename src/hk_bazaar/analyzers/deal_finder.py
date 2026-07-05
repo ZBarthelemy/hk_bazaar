@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from hk_bazaar.analyzers.bluebook import value_listing
 from hk_bazaar.config import Settings, get_settings
 from hk_bazaar.database.models import Listing
 
@@ -90,6 +91,7 @@ def find_deals(
     *,
     settings: Settings | None = None,
     limit: int = 30,
+    use_bluebook: bool = False,
 ) -> list[DealCandidate]:
     settings = settings or get_settings()
     cutoff = datetime.now(UTC) - timedelta(days=settings.deal_recent_days)
@@ -128,7 +130,27 @@ def find_deals(
             score += 3.0
             reasons.append("free / giveaway")
 
-        if listing.price and listing.category and listing.category in cat_stats:
+        bluebook_scored = False
+        if use_bluebook and listing.price:
+            valuation = value_listing(listing)
+            if valuation is not None:
+                bluebook_scored = True
+                if valuation.verdict == "strong_buy":
+                    score += 4.0
+                    reasons.append(
+                        f"bluebook {valuation.display_name}: HKD {listing.price:,.0f} "
+                        f"vs ref HKD {valuation.reference_price:,.0f} ({valuation.delta_pct:+.0f}%)"
+                    )
+                elif valuation.verdict == "good_buy":
+                    score += 3.0
+                    reasons.append(
+                        f"bluebook {valuation.display_name}: {valuation.delta_pct:+.0f}% vs reference"
+                    )
+                elif valuation.verdict == "fair":
+                    score += 1.0
+                    reasons.append(f"bluebook fair vs {valuation.display_name}")
+
+        if not bluebook_scored and listing.price and listing.category and listing.category in cat_stats:
             st = cat_stats[listing.category]
             threshold = st["p25"]
             if listing.price <= threshold:

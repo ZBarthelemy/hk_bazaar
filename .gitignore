@@ -19,10 +19,15 @@ uv.lock
 # Environment
 .env
 
-# Local data
-#data/
-#*.db
-#*.sqlite3
+# Local data (keep bluebook catalog in git)
+data/*
+!data/bluebook/
+!data/bluebook/**
+*.db
+*.sqlite3
+
+# Outreach audit logs
+data/outreach_audit/
 
 # Playwright
 playwright-state/

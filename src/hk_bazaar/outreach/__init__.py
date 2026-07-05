@@ -1,0 +1,1 @@
+"""Outreach & bidding — conservative, approval-first marketplace automation."""

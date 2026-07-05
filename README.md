@@ -106,6 +106,55 @@ Copy `.env.example` → `.env`. Key variables:
 | `HK_BAZAAR_FACEBOOK_ENABLED` | `false` | FB scraper gate |
 | `HK_BAZAAR_DEAL_RECENT_DAYS` | `7` | Recency window for deals |
 
+## Outreach & Bidding
+
+**Philosophy:** Outreach is only triggered on **strong buying opportunities** relative to each SKU's `buy_target` in `data/bluebook/catalog.yaml` — **not** because a listing is at "excellent" reference price.
+
+A listing qualifies when:
+- It strongly matches a catalog SKU, **and**
+- Price ≤ `buy_target × 1.15` (+15%), **or**
+- Price ≤ `buy_target × 1.25` (+25%) with urgency keywords ("moving sale", "急售", etc.)
+
+Proposed bid = **`buy_target × 0.95`**, rounded to HK$50 / HK$100.
+
+### Safe workflow (recommended)
+
+```bash
+# 1. Scrape fresh listings
+hk-bazaar scrape carousell -q "iPhone 13" -p 3
+
+# 2. Scan for opportunities (dry-run ON by default)
+hk-bazaar watch-deals --dry-run
+
+# 3. Review queue
+hk-bazaar pending-outreaches
+
+# 4. Simulate one listing
+hk-bazaar simulate-bid 42
+
+# 5. Approve (still dry-run until OUTREACH_DRY_RUN=false)
+hk-bazaar approve-outreach 1
+hk-bazaar outreach-stats
+```
+
+### Configuration (`.env`)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `HK_BAZAAR_OUTREACH_DRY_RUN` | `true` | Log only — no real offers |
+| `HK_BAZAAR_OUTREACH_AUTO_APPROVE` | `false` | Never auto-send without approval |
+| `HK_BAZAAR_OUTREACH_MAX_DAILY` | `6` | Max outreaches per 24h |
+| `HK_BAZAAR_OUTREACH_COOLDOWN_DAYS` | `7` | Per-seller cooldown |
+| `HK_BAZAAR_OUTREACH_BID_DISCOUNT` | `0.95` | Bid = buy_target × this |
+| `HK_BAZAAR_OUTREACH_PLATFORMS` | `carousell` | Platforms to scan |
+| `HK_BAZAAR_TELEGRAM_BOT_TOKEN` | — | Optional approval notifications |
+
+### Warnings
+
+- **Carousell / Facebook ToS** may prohibit automated offers — ban risk is real.
+- **Dry-run first.** Export Carousell `storage_state` after manual login (`playwright-state/carousell.json`).
+- Facebook outreach is **not enabled** in v1 (`OUTREACH_PLATFORMS=carousell` only).
+
 ## Development
 
 ```bash
