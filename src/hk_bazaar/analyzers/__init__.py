@@ -1,0 +1,1 @@
+"""Deal analysis and flagging."""
