@@ -20,9 +20,9 @@ uv.lock
 .env
 
 # Local data
-data/
-*.db
-*.sqlite3
+#data/
+#*.db
+#*.sqlite3
 
 # Playwright
 playwright-state/
