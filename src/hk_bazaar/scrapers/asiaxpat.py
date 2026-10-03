@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlencode
 
 from loguru import logger
 from selectolax.parser import HTMLParser, Node
 
 from hk_bazaar.database.models import Platform
 from hk_bazaar.scrapers.base import BaseScraper, RawListing
+from hk_bazaar.scrapers.paging import PageWalk
 from hk_bazaar.scrapers.parsers import (
     absolutize_url,
     clean_text,
@@ -29,42 +31,59 @@ class AsiaXpatScraper(BaseScraper):
 
     platform = Platform.ASIA_XPAT
 
-    def scrape(self, *, max_pages: int = 5, fetch_details: bool = True, **_: Any) -> list[RawListing]:
+    def scrape(
+        self,
+        *,
+        max_pages: int = 5,
+        fetch_details: bool = True,
+        query: str | None = None,
+        known_ids: set[str] | None = None,
+        **_: Any,
+    ) -> list[RawListing]:
         base = self.settings.asiaxpat_base_url
-        seen_ids: set[str] = set()
-        listings: list[RawListing] = []
+        walk = PageWalk(known_ids)
 
         for page in range(1, max_pages + 1):
-            url = f"{base}/classifieds" if page == 1 else f"{base}/classifieds?page={page}"
+            url = index_url(base, page=page, query=query)
             logger.info("asiaXPAT index page {}/{}: {}", page, max_pages, url)
             html_text = self.fetch(url)
             page_listings = parse_index_page(html_text, base_url=base)
-
             if not page_listings:
                 logger.warning("No listings on page {}, stopping", page)
-                break
 
+            enriched: list[RawListing] = []
             for stub in page_listings:
-                if stub.external_id in seen_ids:
-                    continue
-                seen_ids.add(stub.external_id)
-
-                if fetch_details:
+                if fetch_details and stub.external_id not in walk.seen:
                     self.polite_delay()
-                    detail_url = stub.url
                     try:
-                        detail_html = self.fetch(detail_url)
+                        detail_html = self.fetch(stub.url)
                         stub = enrich_from_detail(stub, detail_html, base_url=base)
                     except Exception as exc:
-                        logger.warning("Detail fetch failed for {}: {}", detail_url, exc)
+                        logger.warning("Detail fetch failed for {}: {}", stub.url, exc)
+                enriched.append(stub)
 
-                listings.append(stub)
-                self.polite_delay()
-
+            if walk.add(enriched):
+                break
             self.polite_delay()
 
-        logger.info("asiaXPAT scraped {} listings", len(listings))
-        return listings
+        self.pages_fetched = walk.pages_fetched
+        self.caught_up = walk.caught_up
+        self.page_note = walk.note
+        logger.info("asiaXPAT scraped {} listings", len(walk.listings))
+        return walk.listings
+
+
+def index_url(base: str, *, page: int, query: str | None = None) -> str:
+    """Classifieds index URL. `query` is the site's `q` search parameter."""
+    params: dict[str, str] = {}
+    if query:
+        params["q"] = query
+    if page > 1:
+        params["page"] = str(page)
+    url = f"{base.rstrip('/')}/classifieds"
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    return url
 
 
 def parse_index_page(html_text: str, *, base_url: str) -> list[RawListing]:

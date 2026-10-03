@@ -35,7 +35,9 @@ from hk_bazaar.database.outreach_crud import (
     list_outreach_attempts,
     resolve_listing_by_url_or_id,
 )
+from hk_bazaar.jobs.scan import SCAN_MAX_PAGES, format_report, run_scan
 from hk_bazaar.outreach.manager import OutreachManager
+from hk_bazaar.outreach.readiness import format_login_report
 from hk_bazaar.pipelines.ingestion import ingest_listings
 from hk_bazaar.scrapers.asiaxpat import AsiaXpatScraper
 from hk_bazaar.scrapers.carousell import CarousellScraper
@@ -85,7 +87,7 @@ def scrape_cmd(
     with db_session() as session:
         if platform_l in {"asiaxpat", "asia_xpat"}:
             with AsiaXpatScraper() as scraper:
-                raw = scraper.scrape(max_pages=max_pages, fetch_details=not no_details)
+                raw = scraper.scrape(max_pages=max_pages, fetch_details=not no_details, query=query)
         elif platform_l == "carousell":
             with CarousellScraper() as scraper:
                 raw = scraper.scrape(query=query, max_price=max_price, max_pages=max_pages)
@@ -100,6 +102,26 @@ def scrape_cmd(
             f"[green]Done[/green]: {stats['total']} scraped, "
             f"{stats['created']} new, {stats['updated']} updated"
         )
+
+
+@app.command("scan")
+def scan_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")] = "iphone",
+    max_pages: Annotated[int, typer.Option("--max-pages", "-p")] = SCAN_MAX_PAGES,
+) -> None:
+    """Scrape every source and print new rows plus cheap iPhone SKUs."""
+    init_db()
+    with db_session() as session:
+        report = run_scan(session, query=query, max_pages=max_pages)
+    print(format_report(report), end="")
+    if report.all_failed:
+        raise typer.Exit(code=1)
+
+
+@app.command("logins")
+def logins_cmd() -> None:
+    """Show which platforms can send an offer and which still need a login."""
+    print(format_login_report(get_settings()), end="")
 
 
 @app.command("query")
@@ -758,11 +780,12 @@ def approve_outreach_cmd(
         manager = OutreachManager(session)
         try:
             attempt = manager.approve_and_send(attempt_id, proposed_bid=bid)
+            summary = (attempt.id, attempt.status.value, attempt.proposed_bid)
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from exc
     console.print(
-        f"[green]Attempt #{attempt.id}[/green] status={attempt.status.value} "
-        f"bid=HKD {attempt.proposed_bid:,.0f}"
+        f"[green]Attempt #{summary[0]}[/green] status={summary[1]} "
+        f"bid=HKD {summary[2]:,.0f}"
     )
 
 

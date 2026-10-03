@@ -1,7 +1,7 @@
 """Outreach qualification and bidding tests."""
 
 from hk_bazaar.database.models import Listing, Platform
-from hk_bazaar.outreach.bidding import calculate_proposed_bid, round_bid
+from hk_bazaar.outreach.bidding import calculate_proposed_bid, render_offer_message, round_bid
 from hk_bazaar.outreach.catalog import match_listing_to_catalog
 from hk_bazaar.outreach.qualification import has_urgency_signals, qualify_listing
 
@@ -12,8 +12,12 @@ def test_round_bid_fifty_and_hundred() -> None:
     assert round_bid(6175) == 6200
 
 
-def test_proposed_bid_is_95pct_buy_target() -> None:
-    assert calculate_proposed_bid(2400, discount=0.95) == 2300
+def test_proposed_bid_is_10pct_below_ask() -> None:
+    assert calculate_proposed_bid(2400, discount=0.90) == 2150
+    assert calculate_proposed_bid(5200, discount=0.90) == 4700
+    assert calculate_proposed_bid(3800, discount=0.90) == 3400
+    assert calculate_proposed_bid(100, discount=0.90) == 90
+    assert calculate_proposed_bid(28, discount=0.90) == 25
 
 
 def test_match_iphone_13_catalog() -> None:
@@ -91,6 +95,48 @@ def test_ps5_still_matches() -> None:
     match = match_listing_to_catalog("PS5 Slim disc edition with 2 controllers")
     assert match is not None
     assert match.sku == "ps5_slim"
+
+
+def test_message_is_english_then_cantonese_and_skips_description() -> None:
+    listing = Listing(
+        platform=Platform.ASIA_XPAT,
+        external_id="o-msg",
+        title="iPhone 13 128GB",
+        url="https://hongkong.asiaxpat.com/classifieds/o-msg",
+        price=2400.0,
+        district=None,
+        location_raw="Bought from Apple Store HK, in good shape.",
+    )
+    deal = qualify_listing(listing)
+    assert deal is not None
+    message = render_offer_message(deal, 2150, template_name="offer_default.txt.j2")
+    english, cantonese = message.split("你好！", 1)
+    assert "iPhone 13 128GB" in english
+    assert "HKD 2150" in english
+    assert "Bought from Apple Store" not in message
+    assert "我對你個" in cantonese
+    assert "HKD 2150" in cantonese
+
+    listing.district = "Kwun Tong"
+    deal = qualify_listing(listing)
+    assert deal is not None
+    placed = render_offer_message(deal, 2150, template_name="offer_default.txt.j2")
+    assert "in Kwun Tong" in placed
+    assert "喺 Kwun Tong 交收" in placed
+
+    pro_max = Listing(
+        platform=Platform.CAROUSELL,
+        external_id="o-max",
+        title="iPhone 15 Pro Max 256 GB HK$5,200Like new",
+        url="https://www.carousell.com.hk/p/o-max",
+        price=5200.0,
+    )
+    max_deal = qualify_listing(pro_max)
+    assert max_deal is not None
+    named = render_offer_message(max_deal, 4700, template_name="offer_carousell.txt.j2")
+    assert "iPhone 15 Pro Max 256 GB" in named
+    assert "HK$5,200Like new" not in named
+    assert "你好！" in named
 
 
 def test_platform_templates() -> None:

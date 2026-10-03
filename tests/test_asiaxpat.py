@@ -2,9 +2,18 @@
 
 from pathlib import Path
 
-from hk_bazaar.scrapers.asiaxpat import enrich_from_detail, parse_index_page
+from hk_bazaar.scrapers.asiaxpat import enrich_from_detail, index_url, parse_index_page
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_index_url_includes_search_query() -> None:
+    assert index_url("https://hongkong.asiaxpat.com", page=1, query="iphone") == (
+        "https://hongkong.asiaxpat.com/classifieds?q=iphone"
+    )
+    assert index_url("https://hongkong.asiaxpat.com/", page=2, query="iphone") == (
+        "https://hongkong.asiaxpat.com/classifieds?q=iphone&page=2"
+    )
 
 
 def test_parse_index_page() -> None:

@@ -46,6 +46,7 @@ def submit_outreach(
     dry_run: bool | None = None,
 ) -> tuple[bool, str | None]:
     """Route outreach to the platform-specific sender."""
+    from hk_bazaar.outreach.asiaxpat_bidder import submit_asiaxpat_message
     from hk_bazaar.outreach.carousell_bidder import submit_carousell_offer
     from hk_bazaar.outreach.facebook_bidder import submit_facebook_message
 
@@ -54,4 +55,6 @@ def submit_outreach(
         return submit_carousell_offer(attempt, dry_run=dry_run)
     if platform == Platform.FACEBOOK_MARKETPLACE.value:
         return submit_facebook_message(attempt, dry_run=dry_run)
+    if platform == Platform.ASIA_XPAT.value:
+        return submit_asiaxpat_message(attempt, dry_run=dry_run)
     return _write_message_audit(attempt, prefix="message_only")

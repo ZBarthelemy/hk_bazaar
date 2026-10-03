@@ -29,6 +29,7 @@ from playwright.sync_api import Page, sync_playwright
 
 from hk_bazaar.database.models import Platform
 from hk_bazaar.scrapers.base import BaseScraper, RawListing
+from hk_bazaar.scrapers.paging import PageWalk
 from hk_bazaar.scrapers.parsers import clean_text, parse_price
 from hk_bazaar.utils.hk_locations import normalize_location
 
@@ -184,7 +185,15 @@ def parse_facebook_card(*, external_id: str, url: str, text: str, spans: list[st
 class FacebookMarketplaceScraper(BaseScraper):
     platform = Platform.FACEBOOK_MARKETPLACE
 
-    def scrape(self, *, query: str | None = None, max_pages: int = 1, **_: Any) -> list[RawListing]:
+    def scrape(
+        self,
+        *,
+        query: str | None = None,
+        max_pages: int = 1,
+        known_ids: set[str] | None = None,
+        recent: bool = False,
+        **_: Any,
+    ) -> list[RawListing]:
         if not self.settings.facebook_enabled:
             logger.warning(
                 "Facebook Marketplace scraping is DISABLED. "
@@ -206,9 +215,10 @@ class FacebookMarketplaceScraper(BaseScraper):
 
         base = self.settings.facebook_marketplace_url.rstrip("/") + "/"
         search_url = base if not query else f"{base}search/?query={quote_plus(query)}"
+        if recent and query:
+            search_url = f"{search_url}&sortBy=creation_time_descend"
 
-        listings: list[RawListing] = []
-        seen_ids: set[str] = set()
+        walk = PageWalk(known_ids)
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=self.settings.playwright_headless)
@@ -227,37 +237,35 @@ class FacebookMarketplaceScraper(BaseScraper):
 
                 for page_num in range(1, max(1, max_pages) + 1):
                     batch = self._extract_listings(page)
-                    new_count = 0
                     for item in batch:
-                        if item.external_id in seen_ids:
-                            continue
-                        seen_ids.add(item.external_id)
                         item.extra["query"] = query
                         item.extra["feed_page"] = page_num
-                        listings.append(item)
-                        new_count += 1
-
+                    before = len(walk.listings)
+                    stop = walk.add(batch)
                     logger.info(
                         "Facebook feed page {}/{}: {} cards, {} new ({} total)",
                         page_num,
                         max_pages,
                         len(batch),
-                        new_count,
-                        len(listings),
+                        len(walk.listings) - before,
+                        len(walk.listings),
                     )
-
-                    if page_num >= max_pages:
+                    if stop or page_num >= max_pages:
                         break
                     if not self._scroll_for_more(page):
                         logger.info("Facebook feed: no more listings after scroll — stopping early")
+                        walk.caught_up = True
                         break
                     self.polite_delay()
 
             finally:
                 browser.close()
 
-        logger.info("Facebook Marketplace returned {} listings", len(listings))
-        return listings
+        self.pages_fetched = walk.pages_fetched
+        self.caught_up = walk.caught_up
+        self.page_note = walk.note
+        logger.info("Facebook Marketplace returned {} listings", len(walk.listings))
+        return walk.listings
 
     def _extract_listings(self, page: Page) -> list[RawListing]:
         cards = page.evaluate(_EXTRACT_CARDS_JS)

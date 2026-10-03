@@ -44,6 +44,9 @@ class RawListing:
 
 class BaseScraper(ABC):
     platform: Platform
+    pages_fetched: int = 0
+    caught_up: bool = False
+    page_note: str = ""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()

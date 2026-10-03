@@ -16,8 +16,10 @@ uv.lock
 .vscode/
 *.swp
 
-# Environment
+# Environment. Real values stay local. .env.example is the committed template.
 .env
+.env.*
+!.env.example
 
 # Local data (keep bluebook catalog in git)
 data/*
@@ -29,9 +31,15 @@ data/*
 # Outreach audit logs
 data/outreach_audit/
 
-# Playwright
+# Scan job output
+reports/latest-scan.txt
+reports/scans/
+
+# Marketplace login sessions (Facebook, Carousell, asiaXPAT). Never commit these.
 playwright-state/
 .facebook-session/
+**/*storage-state*.json
+**/*storage_state*.json
 
 # Test / coverage
 .pytest_cache/

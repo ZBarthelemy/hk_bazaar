@@ -84,23 +84,22 @@ def submit_facebook_message(
                 page.screenshot(path=screenshot_path)
                 return False, "Message button not found — open listing manually"
 
-            message_btn.first.click()
+            message_btn.first.click(force=True)
             page.wait_for_timeout(2000)
 
-            composer = page.locator(
-                "div[contenteditable='true'][role='textbox'], "
-                "div[aria-label*='Message'], "
-                "div[aria-label*='訊息']"
-            )
+            dialog = page.locator("[role='dialog']").last
+            composer = dialog.locator("[contenteditable='true'], textarea")
             if composer.count() == 0:
                 page.screenshot(path=screenshot_path)
                 return False, "Messenger composer not found"
 
-            composer.first.click()
-            composer.first.fill(attempt.message)
+            composer.last.click()
+            composer.last.fill(attempt.message)
             page.wait_for_timeout(800)
 
-            send_btn = page.get_by_role("button", name="Send")
+            send_btn = dialog.get_by_role("button", name="Send message")
+            if send_btn.count() == 0:
+                send_btn = dialog.get_by_role("button", name="Send")
             if send_btn.count() == 0:
                 send_btn = page.locator("div[aria-label='Send'], div[aria-label='傳送']")
             if send_btn.count() == 0:
@@ -114,6 +113,10 @@ def submit_facebook_message(
             return True, screenshot_path
         except Exception as exc:
             logger.exception("Facebook outreach failed")
+            try:
+                page.screenshot(path=screenshot_path)
+            except Exception:
+                pass
             return False, str(exc)
         finally:
             browser.close()

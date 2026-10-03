@@ -37,6 +37,8 @@ uv run hk-bazaar export --format csv -o data/listings.csv
 | `hk-bazaar scrape asiaxpat` | Scrape asiaXPAT classifieds |
 | `hk-bazaar scrape carousell` | Scrape Carousell HK (Playwright) |
 | `hk-bazaar scrape facebook` | Optional FB skeleton (disabled by default) |
+| `hk-bazaar scan` | All three sources: new rows and cheap iPhone SKUs |
+| `hk-bazaar logins` | Which platforms can send an offer, and which need a login |
 | `hk-bazaar query` | Filter stored listings |
 | `hk-bazaar find-deals` | v1 deal heuristics |
 | `hk-bazaar stats` | Database summary |
@@ -115,7 +117,7 @@ A listing qualifies when:
 - Price ≤ `buy_target × 1.15` (+15%), **or**
 - Price ≤ `buy_target × 1.25` (+25%) with urgency keywords ("moving sale", "急售", etc.)
 
-Proposed bid = **`buy_target × 0.95`**, rounded to HK$50 / HK$100.
+Proposed bid = **`asking price × 0.90`**, rounded to HK$50 / HK$100, and kept below the ask.
 
 ### Safe workflow (recommended)
 
@@ -145,7 +147,7 @@ hk-bazaar outreach-stats
 | `HK_BAZAAR_OUTREACH_AUTO_APPROVE` | `false` | Never auto-send without approval |
 | `HK_BAZAAR_OUTREACH_MAX_DAILY` | `6` | Max outreaches per 24h |
 | `HK_BAZAAR_OUTREACH_COOLDOWN_DAYS` | `7` | Per-seller cooldown |
-| `HK_BAZAAR_OUTREACH_BID_DISCOUNT` | `0.95` | Bid = buy_target × this |
+| `HK_BAZAAR_OUTREACH_BID_DISCOUNT` | `0.90` | Bid = asking price × this |
 | `HK_BAZAAR_OUTREACH_PLATFORMS` | `carousell` | Platforms to scan |
 | `HK_BAZAAR_TELEGRAM_BOT_TOKEN` | — | Optional approval notifications |
 

@@ -42,9 +42,10 @@ class Settings(BaseSettings):
     outreach_auto_approve: bool = False
     outreach_max_daily: int = Field(default=6, ge=1, le=50)
     outreach_cooldown_days: int = Field(default=7, ge=1)
-    outreach_bid_discount: float = Field(default=0.95, gt=0.0, le=1.0)
+    outreach_bid_discount: float = Field(default=0.90, gt=0.0, le=1.0)
     outreach_platforms: str = "all"
     carousell_storage_state: Path = Field(default=Path("playwright-state/carousell.json"))
+    asiaxpat_storage_state: Path = Field(default=Path("playwright-state/asiaxpat.json"))
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
 

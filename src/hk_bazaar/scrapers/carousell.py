@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus, urlencode, urljoin
 
 from loguru import logger
 from playwright.sync_api import Browser, Page, sync_playwright
@@ -13,6 +14,7 @@ from selectolax.parser import HTMLParser
 
 from hk_bazaar.database.models import Platform
 from hk_bazaar.scrapers.base import BaseScraper, RawListing
+from hk_bazaar.scrapers.paging import PageWalk
 from hk_bazaar.scrapers.parsers import clean_text, parse_price
 
 # ---------------------------------------------------------------------------
@@ -47,6 +49,8 @@ class CarousellScraper(BaseScraper):
         category_slug: str | None = None,
         max_price: float | None = None,
         max_pages: int = 3,
+        known_ids: set[str] | None = None,
+        recent: bool = False,
         **_: Any,
     ) -> list[RawListing]:
         base = self.settings.carousell_base_url
@@ -57,8 +61,7 @@ class CarousellScraper(BaseScraper):
         else:
             path = "/categories/home-living-20/"
 
-        listings: list[RawListing] = []
-        seen: set[str] = set()
+        walk = PageWalk(known_ids)
 
         with sync_playwright() as pw:
             browser = self._launch_browser(pw)
@@ -67,11 +70,7 @@ class CarousellScraper(BaseScraper):
                 page.set_default_timeout(self.settings.playwright_timeout_ms)
 
                 for page_num in range(1, max_pages + 1):
-                    url = urljoin(base, path)
-                    if page_num > 1:
-                        sep = "&" if "?" in url else "?"
-                        url = f"{url}{sep}page={page_num}"
-
+                    url = _page_url(urljoin(base, path), page_num=page_num, recent=recent)
                     logger.info("Carousell page {}/{}: {}", page_num, max_pages, url)
                     page.goto(url, wait_until="domcontentloaded")
                     page.wait_for_timeout(2000)  # allow hydration / CF
@@ -79,22 +78,24 @@ class CarousellScraper(BaseScraper):
                     batch = self._extract_listings(page, base_url=base)
                     if not batch:
                         logger.warning("No Carousell listings on page {}", page_num)
+                        walk.add([])
                         break
-
-                    for item in batch:
-                        if max_price is not None and item.price is not None and item.price > max_price:
+                    if max_price is not None:
+                        batch = [item for item in batch if item.price is None or item.price <= max_price]
+                        if not batch:
+                            self.polite_delay()
                             continue
-                        if item.external_id in seen:
-                            continue
-                        seen.add(item.external_id)
-                        listings.append(item)
-
+                    if walk.add(batch):
+                        break
                     self.polite_delay()
             finally:
                 browser.close()
 
-        logger.info("Carousell scraped {} listings", len(listings))
-        return listings
+        self.pages_fetched = walk.pages_fetched
+        self.caught_up = walk.caught_up
+        self.page_note = walk.note
+        logger.info("Carousell scraped {} listings", len(walk.listings))
+        return walk.listings
 
     def _launch_browser(self, pw: Any) -> Browser:
         return pw.chromium.launch(headless=self.settings.playwright_headless)
@@ -202,10 +203,41 @@ def _dict_to_listing(d: dict[str, Any], base_url: str) -> RawListing | None:
         location_raw=location_raw,
         category_raw=clean_text(str(d.get("category_name") or d.get("collection_name") or "")),
         condition=clean_text(str(d.get("condition") or "")),
+        posted_at=_coerce_posted_at(d.get("time_created") or d.get("created_at")),
         image_urls=images,
         seller_name=_seller_name(d),
         extra={"source": "next_data"},
     )
+
+
+def _page_url(url: str, *, page_num: int, recent: bool) -> str:
+    """`sort_by=3` is Carousell's recent sort (newest listed first)."""
+    params: dict[str, str] = {}
+    if recent:
+        params["sort_by"] = "3"
+    if page_num > 1:
+        params["page"] = str(page_num)
+    if not params:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}{urlencode(params)}"
+
+
+def _coerce_posted_at(value: Any) -> datetime | None:
+    if isinstance(value, dict):
+        value = value.get("seconds") or value.get("low")
+        if isinstance(value, dict):
+            value = value.get("low")
+    if isinstance(value, str) and value.isdigit():
+        value = int(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    if value > 10_000_000_000:
+        value = value / 1000
+    try:
+        return datetime.fromtimestamp(value, UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def parse_listing_cards(html_text: str, *, base_url: str) -> list[RawListing]:

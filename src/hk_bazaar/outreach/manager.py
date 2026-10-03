@@ -76,7 +76,7 @@ class OutreachManager:
             if deal is None:
                 continue
 
-            proposed_bid = calculate_proposed_bid(deal.buy_target)
+            proposed_bid = calculate_proposed_bid(deal.listing_price)
             message = render_offer_message(
                 deal,
                 proposed_bid,
@@ -150,7 +150,7 @@ class OutreachManager:
         deal = qualify_listing(listing)
         if deal is None:
             return {"qualified": False, "reason": "Does not meet buy_target + urgency rules"}
-        proposed_bid = calculate_proposed_bid(deal.buy_target)
+        proposed_bid = calculate_proposed_bid(deal.listing_price)
         message = render_offer_message(
             deal,
             proposed_bid,

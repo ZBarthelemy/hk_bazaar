@@ -74,34 +74,53 @@ def submit_carousell_offer(
             page.goto(attempt.listing_url, wait_until="domcontentloaded")
             _polite_pause()
 
-            # Selectors are best-effort — update after inspecting live Carousell UI.
-            make_offer = page.get_by_role("button", name="Make Offer")
-            if make_offer.count() == 0:
-                make_offer = page.locator("button:has-text('Make Offer'), button:has-text('出價')")
-            if make_offer.count() == 0:
+            # Make Offer opens the chat and files the asking price. Edit that
+            # price, then send the bilingual message in the same thread.
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            opener = page.locator("button:visible, a:visible").filter(has_text="Make Offer")
+            if opener.count() == 0:
+                opener = page.locator("button:visible, a:visible").filter(has_text="View Offer")
+            if opener.count() == 0:
+                opener = page.locator("button:visible, a:visible").filter(has_text="出價")
+            if opener.count() == 0:
                 page.screenshot(path=screenshot_path)
-                return False, "Make Offer button not found — chat fallback required"
+                return False, "Make Offer button not found"
 
-            make_offer.first.click()
-            page.wait_for_timeout(1500)
+            opener.first.click()
+            page.wait_for_timeout(2000)
 
-            price_input = page.locator(
-                "input[type='number'], input[name*='price'], input[placeholder*='HK']"
-            )
-            if price_input.count() == 0:
+            bid_text = str(int(attempt.proposed_bid))
+            edit = page.get_by_role("button", name="Edit offer")
+            if edit.count() == 0:
+                page.screenshot(path=screenshot_path)
+                return False, "Edit offer button not found"
+            edit.first.click()
+            page.wait_for_timeout(500)
+            price = page.locator("input[type='number']:visible")
+            if price.count() == 0:
                 page.screenshot(path=screenshot_path)
                 return False, "Offer price input not found"
+            price.first.fill(bid_text)
+            page.get_by_role("button", name="Edit offer").click()
+            page.wait_for_timeout(1500)
 
-            price_input.first.fill(str(int(attempt.proposed_bid)))
-            page.wait_for_timeout(800)
-
-            submit = page.get_by_role("button", name="Submit")
-            if submit.count() == 0:
-                submit = page.locator("button:has-text('Submit'), button:has-text('送出')")
-            submit.first.click()
-            _polite_pause()
+            box = page.locator("textarea[placeholder='Type here...']:visible")
+            if box.count() == 0:
+                page.screenshot(path=screenshot_path)
+                return False, "Carousell chat box not found"
+            box.first.fill(attempt.message)
+            send = page.locator("button:visible").filter(has_text="Send")
+            if send.count() == 0:
+                page.screenshot(path=screenshot_path)
+                return False, "Send button not found — message drafted but not sent"
+            send.last.click()
+            page.wait_for_timeout(2000)
 
             page.screenshot(path=screenshot_path)
+            body = page.locator("body").inner_text()
+            shown_bid = bid_text in body.replace(",", "") or f"{int(attempt.proposed_bid):,}" in body
+            if not shown_bid or "你好" not in body:
+                return False, "Chat did not show the bid and the Cantonese message"
             logger.info("Submitted Carousell offer HKD {:,.0f} for attempt {}", attempt.proposed_bid, attempt.id)
             return True, screenshot_path
         except Exception as exc:
